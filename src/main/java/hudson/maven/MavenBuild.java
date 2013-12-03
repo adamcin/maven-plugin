@@ -724,9 +724,14 @@ public class MavenBuild extends AbstractMavenBuild<MavenModule,MavenBuild> {
                 Executor.currentExecutor().newImpersonatingProxy(MavenBuildProxy2.class,this));
         }
     }
-    
-    
 
+    /**
+     * The {@link MavenBuildExecution} is now only executed when running a single-module build. It depends on the
+     * {@link Builder} class to execute Maven 1.x and 2.x builds. In order to support Maven 3 for single-module
+     * builds, the {@link #doRun} method must incorporate the {@link Maven3Builder}, which is, in turn, dependent on the
+     * {@link ProxyImpl2} implementation. These dependencies require reorganizing of this method in order to avoid
+     * constructing the deprecated objects for the Maven 3 execution path.
+     */
     private class MavenBuildExecution extends AbstractBuildExecution {
         private List<MavenReporter> reporters;
 
@@ -745,6 +750,26 @@ public class MavenBuild extends AbstractMavenBuild<MavenModule,MavenBuild> {
             return wsl.allocate(getModuleSetBuild().getModuleRoot().child(getProject().getRelativePath()));
         }
 
+        /**
+         * TODO: [JENKINS-11964] identify existing Maven 2 single-module build behavior
+         * TODO: [JENKINS-11964] reorganize for Maven 3 functionality without changing Maven 2 behavior
+         * TODO: [JENKINS-11964] implement Maven 3 functionality with same assumptions as Maven 2 behavior
+         * TODO: [JENKINS-?] replace use of {@link Builder} with {@link Maven2Builder} for future maintainability and convergence with {@link MavenModuleSetBuild}s
+         * TODO: [JENKINS-?] evaluate potential use of {@link hudson.model.EnvironmentContributingAction}s, pre/post builders, and publishers once behavior parity with existing assumptions (listed below) is established
+         *
+         * Implicit Assumptions:
+         * 1. Module's reporters are created at start of {@link #doRun(hudson.model.BuildListener)}
+         * 2. {@link Environment}s are initialized from the parent {@link MavenModuleSet}'s {@link BuildWrapper}s
+         * 3. Parent project's {@link hudson.model.EnvironmentContributingAction}s are not evaluated for single-module builds
+         * 4. Parent project's pre/post builders and publishers are not executed as part of a single-module build
+         * 5. Maven 2 Args: {@code -N -B [ -Dmaven.repo.local=$localRepoPath ] [ -s $mavenSettingsPath ] -f $modulePom $tokenizedGoals}
+         * 6. {@link #setResult(hudson.model.Result)} is not called within this method.
+         * 7. Module's reporters are executed by {@link #post2(hudson.model.BuildListener)} method.
+         *
+         * @param listener
+         * @return
+         * @throws Exception
+         */
         protected Result doRun(BuildListener listener) throws Exception {
             // pick up a list of reporters to run
             reporters = getProject().createReporters();
